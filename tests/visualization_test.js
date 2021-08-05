@@ -1,6 +1,6 @@
 import test from "ava";
 
-import { configurationDimension, configurationLayout } from "../src/configuration.js";
+import { configuration, configurationDimension, configurationLayout } from "../src/configuration.js";
 import { StackedConnections } from "../src/index.js";
 
 /******************** EMPTY VARIABLES ********************/
@@ -49,7 +49,7 @@ test("render", t => {
     sc.render(document.body);
 
     // get generated element
-    let artboard = document.querySelector(".lgv-stacked-connections");
+    let artboard = document.querySelector(`.${configuration.name}`);
 
     t.true(artboard !== undefined);
     t.true(artboard.nodeName == "svg");
@@ -121,7 +121,7 @@ test("render_params", t => {
     scn.render(document.body);
 
     // get generated element
-    let artboard = document.querySelector(".lgv-stacked-connections");
+    let artboard = document.querySelector(`.${configuration.name}`);
 
     t.true(artboard !== undefined);
     t.true(artboard.nodeName == "svg");
