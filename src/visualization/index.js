@@ -131,7 +131,7 @@ class StackedConnections {
             .data(this.stacks ? this.stacks.slice(0, this.stacks.length - 1) : [])
             .enter()
             .append("g")
-            .attr("id", (d, i) => `lgv-connection-${this.stacks[i].key}-to-${this.stacks[i+1].key}`);
+            .attr("class", (d, i) => `lgv-connection-${this.stacks[i].key}-to-${this.stacks[i+1].key}`);
     }
 
     /**
@@ -241,7 +241,7 @@ class StackedConnections {
             .data(this.stacks ? this.stacks : [])
             .enter()
             .append("g")
-            .attr("id", d => `lgv-${d.key}-labels`);
+            .attr("class", d => `lgv-${d.key}-labels`);
     }
 
     /**
@@ -255,7 +255,7 @@ class StackedConnections {
             .data(this.stacks ? this.stacks : [])
             .enter()
             .append("g")
-            .attr("id", d => `lgv-stack-${d.key}`);
+            .attr("class", d => `lgv-stack-${d.key}`);
     }
 
     /**
