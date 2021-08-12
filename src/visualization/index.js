@@ -10,12 +10,13 @@ import { configuration, configurationDimension, configurationLayout } from "../c
  * StackedConnections is a hybrid visualization of a series of stacked bar charts with curved connection paths between related stacked values.
  * @param {array} data - objects where each represents a path in the hierarchy
  * @param {integer} height - artboard height
+ * @param {boolean} includeValueInLabel - TRUE will show % value with stacked bars
  * @param {integer} width - artboard width
  * @param {integer} paddingStackCell - space between stacked shapes
  * @param {integer} paddingStackText - space between stack shape and corresponding label
  */
 class StackedConnections {
-    constructor(data, width=configurationDimension.width, height=configurationDimension.height, paddingStackCell=configurationLayout.paddingStackCell, paddingStackText=configurationLayout.paddingStackText) {
+    constructor(data, width=configurationDimension.width, height=configurationDimension.height, includeValueInLabel=true, paddingStackCell=configurationLayout.paddingStackCell, paddingStackText=configurationLayout.paddingStackText) {
 
         // update self
         this.artboard = null;
@@ -23,12 +24,19 @@ class StackedConnections {
         this.connectionGroup = null;
         this.dataSource = data;
         this.height = height;
+        this.includeValueInLabel = includeValueInLabel;
         this.name = configuration.name;
         this.paddingStackCell = paddingStackCell;
         this.paddingStackText = paddingStackText;
         this.stackGroup = null;
         this.stackLabelGroup = null;
         this.width = width;
+
+        // using font size as the base unit of measure make responsiveness easier to manage across devices
+        this.artboardUnit = typeof window === "undefined" ? 16 : parseFloat(getComputedStyle(document.body).fontSize);
+
+        // update self
+        this.paddingAnnotations = this.artboardUnit * 2;
 
         // process data
         this.stacks = this.data;
@@ -59,10 +67,10 @@ class StackedConnections {
 
                 // format into consistent stack/connection object
                 result.push({
-                    key: key,
-                    series: stacked ? stacked.series : [],
-                    scale: stacked ? stacked.scale : null,
                     connections: stacked ?  this.dataSource.connections.filter(d => (stacked.series.map(x => x.key)).includes(d.source)) : null,
+                    key: key,
+                    scale: stacked ? stacked.scale : null,
+                    series: stacked ? stacked.series : [],
                     totalValues: stacked ? stacked.totalValues : 0
                 })
 
@@ -83,6 +91,31 @@ class StackedConnections {
             .domain(this.stacks ? this.stacks.map(d => d.key) : [])
             .rangeRound([0, this.width])
             .paddingInner(0.9);
+    }
+
+    /**
+     * Position and minimally style annotations in SVG dom element.
+     * @param {node} domNode - d3.js SVG selection
+     */
+    configureAnnotations(domNode) {
+        domNode.append("text")
+            .attr("class", "lgv-annotation")
+            .attr("x", (d,i) => i == this.stacks.length - 1 ? this.width : this.horizontalScale(d.key))
+            .attr("y", this.paddingAnnotations / 2)
+            .attr("text-anchor", (d,i) => i == this.stacks.length - 1 ? "end" : "start")
+            .text(d => d.key);
+    }
+
+    /**
+     * Generate SVG text elements in the HTML DOM.
+     * @param {node} domNode - HTML node
+     * @returns A d3.js selection.
+     */
+    generateAnnotations(domNode) {
+        return domNode.append("g")
+            .selectAll("g")
+            .data(this.stacks ? this.stacks : [])
+            .join("g");
     }
 
     /**
@@ -215,12 +248,10 @@ class StackedConnections {
                     .attr("x", i == nodes.length - 1 ? this.horizontalScale(d.key) - this.paddingStackText : this.horizontalScale(d.key) + this.barWidth + this.paddingStackText)
                     .attr("y", (x, j) => d.scale(x[0][0]) + (this.paddingStackCell * j) + (d.scale(x[0].data[x.key]) * 0.63))
                     .attr("text-anchor", x => i == nodes.length - 1 ? "end" : "start")
-
-                    // text items
                     .each((x, j, nodes) => {
                         select(nodes[j])
                             .selectAll("tspan")
-                            .data([x.key, `${((x[0].data[x.key]/d.totalValues) * 100).toFixed(2)}%`])
+                            .data(this.includeValueInLabel ? [x.key, `${((x[0].data[x.key]/d.totalValues) * 100).toFixed(2)}%`] : [x.key])
                             .enter()
                             .append("tspan")
                             .attr("dx", (y, k) => k == 0 ? "" : `${k * 0.35}em`)
@@ -285,12 +316,14 @@ class StackedConnections {
 
             // calculate total value
             let dataValues = sum(Object.keys(data).map(d => data[d]));
+
+            // determine how much padding is between stack value blocks
             let paddingValues = this.paddingStackCell * (keysSorted.length - 1);
 
             // y scale
             let yScale = scaleLinear()
                 .domain([0, dataValues])
-                .range([0, (this.height - paddingValues)]);
+                .range([0, (this.height - paddingValues - this.paddingAnnotations)]);
 
             result = {
                 series: series,
@@ -313,20 +346,29 @@ class StackedConnections {
         // generate svg artboard
         this.artboard = this.generateArtboard(domNode);
 
+        // chart content group
+        const artwork = this.artboard
+            .append("g")
+            .attr("transform", d => `translate(0,${this.paddingAnnotations})`);
+
+        // generate chart annotations
+        const annotations = this.generateAnnotations(this.artboard);
+        this.configureAnnotations(annotations);
+
         // generate group for each stack
-        this.stackGroup = this.generateStackGroups(this.artboard);
+        this.stackGroup = this.generateStackGroups(artwork);
 
         // generate stack bars
         this.generateBars(this.stackGroup);
 
         // generate group for each connection set
-        this.connectionGroup = this.generateConnectionGroups(this.artboard);
+        this.connectionGroup = this.generateConnectionGroups(artwork);
 
         // generate connections
         this.generateConnections(this.connectionGroup);
 
         // generate group for each stack text
-        this.stackLabelGroup = this.generateStackLabelGroups(this.artboard);
+        this.stackLabelGroup = this.generateStackLabelGroups(artwork);
 
         // generate labels
         this.generateStackLabels(this.stackLabelGroup);
