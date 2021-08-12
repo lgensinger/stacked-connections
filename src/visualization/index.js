@@ -148,7 +148,34 @@ class StackedConnections {
                 .attr("x", this.horizontalScale(category.key))
                 .attr("y", (d,i) => category.scale(d[0][0]) + (this.paddingStackCell * i))
                 .attr("height", d => category.scale(d[0][1]) - category.scale(d[0][0]))
-                .attr("width", this.barWidth);
+                .attr("width", this.barWidth)
+                .on("mouseover", (e,d) => {
+
+                    // update class
+                    select(e.target).attr("class", "lgv-bar active");
+
+                    // send event to parent
+                    this.artboard.dispatch("barmouseover", {
+                        bubbles: true,
+                        detail: {
+                            label: d.key,
+                            stack: category.key,
+                            xy: [e.clientX + (this.artboardUnit / 2), e.clientY + (this.artboardUnit / 2)]
+                        }
+                    });
+
+                })
+                .on("mouseout", (e,d) => {
+
+                    // update class
+                    select(e.target).attr("class", "lgv-bar");
+
+                    // send event to parent
+                    this.artboard.dispatch("barmouseout", {
+                        bubbles: true
+                    });
+
+                });
 
         });
     }
