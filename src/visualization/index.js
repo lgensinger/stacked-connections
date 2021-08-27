@@ -1,4 +1,4 @@
-import { sum } from "d3-array";
+import { max, sum } from "d3-array";
 import { path } from "d3-path";
 import { scaleBand, scaleLinear } from "d3-scale";
 import { select } from "d3-selection";
@@ -26,7 +26,7 @@ class StackedConnections {
         this.height = height;
         this.includeValueInLabel = includeValueInLabel;
         this.name = configuration.name;
-        this.paddingStackCell = paddingStackCell;
+        this.paddingStackCell = null;
         this.paddingStackText = paddingStackText;
         this.stackGroup = null;
         this.stackLabelGroup = null;
@@ -37,6 +37,22 @@ class StackedConnections {
 
         // update self
         this.paddingAnnotations = this.artboardUnit * 2;
+
+        // get value for max keys in any stack
+        let maxKeyCount = max(this.dataSource.stacks.map(d => Object.keys(d[Object.keys(d)[0]]).length));
+
+        // try to use the provided padding but
+        // if requested would set a negative scale
+        // use the largest possible padding given remaining space
+        let paddingIsValid = paddingStackCell * (maxKeyCount - 1) < this.height;
+
+        // padding is too big as requested
+        if (!paddingIsValid) {
+
+            // set new padding with available space
+            this.paddingStackCell = (this.height / maxKeyCount) * 0.2;
+
+        }
 
         // process data
         this.stacks = this.data;
