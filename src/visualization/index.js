@@ -26,7 +26,7 @@ class StackedConnections {
         this.height = height;
         this.includeValueInLabel = includeValueInLabel;
         this.name = configuration.name;
-        this.paddingStackCell = null;
+        this.paddingStackCell = paddingStackCell;
         this.paddingStackText = paddingStackText;
         this.stackGroup = null;
         this.stackLabelGroup = null;
@@ -57,6 +57,7 @@ class StackedConnections {
         // process data
         this.stacks = this.data;
         this.barWidth = this.horizontalScale.bandwidth();
+        this.connectionPaths = this.generateConnectionPaths(this.stacks);
 
     }
 
@@ -110,6 +111,94 @@ class StackedConnections {
     }
 
     /**
+     * Calculate the character width based of typographic em value.
+     * @param {string} word - word to calculate
+     * @param {float} unit - smallest atmoic unit of measure (should normally be the fontsize)
+     * @returns A float representing the length of a given word based on provided unit and typographic rules of em sizing.
+     */
+    characterWidth(word, unit) {
+
+        let em = 0.6;
+        let small = 0.25;
+        let mid = 0.45;
+
+        let reference = {
+            a: em,
+            b: mid,
+            c: mid,
+            d: em,
+            e: mid,
+            f: small,
+            g: em,
+            h: mid,
+            i: small,
+            j: mid,
+            k: mid,
+            l: small,
+            m: em,
+            n: 0.5,
+            o: em,
+            p: mid,
+            q: mid,
+            r: small,
+            s: em,
+            t: small,
+            u: mid,
+            v: mid,
+            w: mid,
+            x: mid,
+            y: small,
+            z: mid,
+            A: em,
+            B: em,
+            C: em,
+            D: em,
+            E: em,
+            F: em,
+            G: em,
+            H: em,
+            I: small,
+            J: mid,
+            K: em,
+            L: em,
+            M: em,
+            N: em,
+            O: em,
+            P: mid,
+            Q: mid,
+            R: mid,
+            S: mid,
+            T: em,
+            U: mid,
+            V: em,
+            W: em,
+            X: em,
+            Y: em,
+            Z: em
+        };
+
+        let result = 0;
+
+        // loop through characters
+        for (const c of word) {
+
+            // calculate percent difference from em unit
+            let difference = reference[c];
+
+            // if it is null assume 1 em for punctuation etc.
+            if (difference) {
+                result += difference * unit;
+            } else {
+                result += em * unit;
+            }
+
+        }
+
+        return result;
+
+    }
+
+    /**
      * Position and minimally style annotations in SVG dom element.
      * @param {node} domNode - d3.js SVG selection
      */
@@ -160,6 +249,7 @@ class StackedConnections {
                 .data(category.series)
                 .enter()
                 .append("rect")
+                .attr("data-key", d => d.key)
                 .attr("class", "lgv-bar")
                 .attr("x", this.horizontalScale(category.key))
                 .attr("y", (d,i) => category.scale(d[0][0]) + (this.paddingStackCell * i))
@@ -176,6 +266,7 @@ class StackedConnections {
                         detail: {
                             label: d.key,
                             stack: category.key,
+                            paths: this.connectionPaths.filter(x => x.includes(d.key)),
                             xy: [e.clientX + (this.artboardUnit / 2), e.clientY + (this.artboardUnit / 2)]
                         }
                     });
@@ -211,6 +302,62 @@ class StackedConnections {
     }
 
     /**
+     * Construct hierachial paths noting connections between stacks visually left to right.
+     * @param {array} stacks - generated data array from get data()
+     * @returns An array of strings where each is a period delimited representation of the connection path between stack from visual left-to-right.
+     */
+    generateConnectionPaths(stacks) {
+
+        let result = [];
+
+        // loop through stacks
+        stacks.forEach(d => {
+
+            // loop through connections
+            d.connections.forEach(dt => {
+
+                // check for prefix already captured
+                let segmentsWithSource = result.filter(d => d.split(".")[d.split(".").length - 1] === dt.source);
+                let hasPrefix = segmentsWithSource.length > 0;
+
+                // if prefixes are found
+                if (hasPrefix) {
+
+                    // loop through matches
+                    segmentsWithSource.forEach(s => {
+
+                        // add to list
+                        result.push(`${s}.${dt.target}`);
+
+                    });
+
+                } else {
+
+                    // add to list
+                    result.push(`${dt.source}.${dt.target}`);
+
+                }
+
+            });
+
+        });
+
+        // one more loop to remove paths that were needed only to append to
+        // but now are out-of-date since later children complete the path
+        let prunedResult = [];
+        result.forEach(d => {
+            result.forEach(dt => {
+                if (dt.includes(d) && dt.length > d.length) {
+                    prunedResult.push(dt);
+                }
+            });
+        });
+
+        return prunedResult;
+
+    }
+
+    /**
      * Generate SVG connection paths in the HTML DOM.
      * @param {node} domNode - HTML node
      * @returns A d3.js selection.
@@ -221,6 +368,7 @@ class StackedConnections {
 
                 let sourceStack = connection;
                 let targetStack = this.stacks[i+1];
+                let tracked = 0;
 
                 // render connection values
                 select(nodes[i])
@@ -228,7 +376,10 @@ class StackedConnections {
                     .data(this.stacks[i].connections)
                     .enter()
                     .append("path")
-                    .attr("class", d => d.focus)
+                    .attr("class", "lgv-connection")
+                    .attr("data-path", d => [...new Set(this.connectionPaths.filter(x => x.includes(d.source) && x.includes(d.target)))])
+                    .attr("data-source", d => d.source)
+                    .attr("data-target", d => d.target)
                     .attr("d", d => {
 
                         let sourceStackLayout = sourceStack.series.filter(x => x.key === d.source)[0];
@@ -286,20 +437,44 @@ class StackedConnections {
                     .selectAll(".lgv-label")
                     .data(d.series)
                     .enter()
-                    .append("text")
+                    .append("g")
                     .attr("class", "lgv-label")
-                    .attr("x", i == nodes.length - 1 ? this.horizontalScale(d.key) - this.paddingStackText : this.horizontalScale(d.key) + this.barWidth + this.paddingStackText)
-                    .attr("y", (x, j) => d.scale(x[0][0]) + (this.paddingStackCell * j) + (d.scale(x[0].data[x.key]) * 0.63))
-                    .attr("text-anchor", x => i == nodes.length - 1 ? "end" : "start")
-                    .each((x, j, nodes) => {
-                        select(nodes[j])
-                            .selectAll("tspan")
-                            .data(this.includeValueInLabel ? [x.key, `${((x[0].data[x.key]/d.totalValues) * 100).toFixed(2)}%`] : [x.key])
-                            .enter()
-                            .append("tspan")
-                            .attr("dx", (y, k) => k == 0 ? "" : `${k * 0.35}em`)
-                            .text(y => y);
-                    });
+                    .attr("data-key", x => x.key)
+                    .attr("transform", (x,j) => {
+
+                        let tx = i == nodes.length - 1 ? this.horizontalScale(d.key) - this.paddingStackText - (this.characterWidth(x.key, this.artboardUnit)) : this.horizontalScale(d.key) + this.barWidth + this.paddingStackText;
+
+                        let ty = d.scale(x[0][0]) + (this.paddingStackCell * j) + (d.scale(x[0].data[x.key]) / 2) - (this.artboardUnit /2);
+
+                        return `translate(${tx},${ty})`;
+
+                    })
+                    .each((x, j, nodes2) => {
+
+                        let g = select(nodes2[j]);
+
+                        // add background for when underlying layer makes text illegible
+                        g.append("rect")
+                            .attr("x", 0)
+                            .attr("y", 0)
+                            .attr("width", this.characterWidth(x.key, this.artboardUnit))
+                            .attr("height", this.artboardUnit * 1.4);
+
+                        // add text
+                        g.append("text")
+                            .attr("x", this.artboardUnit * 0.2)
+                            .attr("y", this.artboardUnit)
+                            .each((z, l, nodes3) => {
+                                select(nodes3[l])
+                                    .selectAll("tspan")
+                                    .data(this.includeValueInLabel ? [z.key, `${((z[0].data[z.key]/d.totalValues) * 100).toFixed(2)}%`] : [z.key])
+                                    .enter()
+                                    .append("tspan")
+                                    .attr("dx", (a, m) => m == 0 ? "" : `${m * 0.35}em`)
+                                    .text(z => z);
+                        });
+
+                });
 
         });
     }
@@ -361,7 +536,7 @@ class StackedConnections {
             let dataValues = sum(Object.keys(data).map(d => data[d]));
 
             // determine how much padding is between stack value blocks
-            let paddingValues = this.paddingStackCell * (keysSorted.length - 1);
+            let paddingValues = this.paddingStackCell * keysSorted.length;
 
             // y scale
             let yScale = scaleLinear()
@@ -398,17 +573,17 @@ class StackedConnections {
         const annotations = this.generateAnnotations(this.artboard);
         this.configureAnnotations(annotations);
 
-        // generate group for each stack
-        this.stackGroup = this.generateStackGroups(artwork);
-
-        // generate stack bars
-        this.generateBars(this.stackGroup);
-
         // generate group for each connection set
         this.connectionGroup = this.generateConnectionGroups(artwork);
 
         // generate connections
         this.generateConnections(this.connectionGroup);
+
+        // generate group for each stack
+        this.stackGroup = this.generateStackGroups(artwork);
+
+        // generate stack bars
+        this.generateBars(this.stackGroup);
 
         // generate group for each stack text
         this.stackLabelGroup = this.generateStackLabelGroups(artwork);
