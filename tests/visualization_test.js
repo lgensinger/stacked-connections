@@ -78,7 +78,7 @@ let testData = {
 }
 
 // initialize
-let scn = new StackedConnections(testData, testWidth, testHeight, testPaddingCell, testPaddingText);
+let scn = new StackedConnections(testData, testWidth, testHeight, true, testPaddingCell, testPaddingText);
 
 // TEST INIT //
 test("init_params", t => {

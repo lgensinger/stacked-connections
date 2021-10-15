@@ -22,6 +22,7 @@ class StackedConnections {
         this.artboard = null;
         this.barWidth = null;
         this.connectionGroup = null;
+        this.container = null;
         this.dataSource = data;
         this.height = height;
         this.includeValueInLabel = includeValueInLabel;
@@ -37,27 +38,6 @@ class StackedConnections {
 
         // update self
         this.paddingAnnotations = this.artboardUnit * 2;
-
-        // get value for max keys in any stack
-        let maxKeyCount = max(this.dataSource.stacks.map(d => Object.keys(d[Object.keys(d)[0]]).length));
-
-        // try to use the provided padding but
-        // if requested would set a negative scale
-        // use the largest possible padding given remaining space
-        let paddingIsValid = paddingStackCell * (maxKeyCount - 1) < this.height;
-
-        // padding is too big as requested
-        if (!paddingIsValid) {
-
-            // set new padding with available space
-            this.paddingStackCell = (this.height / maxKeyCount) * 0.2;
-
-        }
-
-        // process data
-        this.stacks = this.data;
-        this.barWidth = this.horizontalScale.bandwidth();
-        this.connectionPaths = this.generateConnectionPaths(this.stacks);
 
     }
 
@@ -107,7 +87,7 @@ class StackedConnections {
         return scaleBand()
             .domain(this.stacks ? this.stacks.map(d => d.key) : [])
             .rangeRound([0, this.width])
-            .paddingInner(0.9);
+            .paddingInner(0.94);
     }
 
     /**
@@ -203,12 +183,40 @@ class StackedConnections {
      * @param {node} domNode - d3.js SVG selection
      */
     configureAnnotations(domNode) {
-        domNode.append("text")
-            .attr("class", "lgv-annotation")
+        domNode
             .attr("x", (d,i) => i == this.stacks.length - 1 ? this.width : this.horizontalScale(d.key))
             .attr("y", this.paddingAnnotations / 2)
             .attr("text-anchor", (d,i) => i == this.stacks.length - 1 ? "end" : "start")
             .text(d => d.key);
+    }
+
+    /**
+     * Configure data series.
+     * @param {}
+     */
+    configureData() {
+
+        // get value for max keys in any stack
+        let maxKeyCount = max(this.dataSource.stacks.map(d => Object.keys(d[Object.keys(d)[0]]).length));
+
+        // try to use the provided padding but
+        // if requested would set a negative scale
+        // use the largest possible padding given remaining space
+        let paddingIsValid = this.paddingStackCell * (maxKeyCount - 1) < this.height;
+
+        // padding is too big as requested
+        if (!paddingIsValid) {
+
+            // set new padding with available space
+            this.paddingStackCell = (this.height / maxKeyCount) * 0.2;
+
+        }
+
+        // process data
+        this.stacks = this.data;
+        this.barWidth = this.horizontalScale.bandwidth();
+        this.connectionPaths = this.generateConnectionPaths(this.stacks);
+
     }
 
     /**
@@ -217,21 +225,32 @@ class StackedConnections {
      * @returns A d3.js selection.
      */
     generateAnnotations(domNode) {
-        return domNode.append("g")
-            .selectAll("g")
+        return domNode
+            .selectAll(".lgv-annotation")
             .data(this.stacks ? this.stacks : [])
-            .join("g");
+            .join(
+                enter => enter.append("text"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "lgv-annotation");
     }
 
     /**
      * Generate SVG artboard in the HTML DOM.
-     * @param {node} domNode - HTML node
+     * @param {selection} domNode - d3 selection
      * @returns A d3.js selection.
      */
     generateArtboard(domNode) {
-        return select(domNode)
-            .append("svg")
-            .attr("viewBox", `0 0 ${this.width} ${this.height}`)
+        return domNode
+            .selectAll("svg")
+            .data([{height: this.height, width: this.width}])
+            .join(
+                enter => enter.append("svg"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("viewBox", d => `0 0 ${d.width} ${d.height}`)
             .attr("class", this.name);
     }
 
@@ -245,10 +264,13 @@ class StackedConnections {
 
             // render stack values
             select(nodes[i])
-                .selectAll(`.${category.key}`)
+                .selectAll(".lgv-bar")
                 .data(category.series)
-                .enter()
-                .append("rect")
+                .join(
+                    enter => enter.append("rect"),
+                    update => update,
+                    exit => exit.remove()
+                )
                 .attr("data-key", d => d.key)
                 .attr("class", "lgv-bar")
                 .attr("x", this.horizontalScale(category.key))
@@ -294,11 +316,14 @@ class StackedConnections {
      */
     generateConnectionGroups(domNode) {
         return domNode
-            .selectAll(".lgv-connection")
+            .selectAll(".lgv-connections")
             .data(this.stacks ? this.stacks.slice(0, this.stacks.length - 1) : [])
-            .enter()
-            .append("g")
-            .attr("class", (d, i) => `lgv-connection-${this.stacks[i].key}-to-${this.stacks[i+1].key}`);
+            .join(
+                enter => enter.append("g"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "lgv-connections")
     }
 
     /**
@@ -372,10 +397,14 @@ class StackedConnections {
 
                 // render connection values
                 select(nodes[i])
-                    .selectAll(`.${this.stacks[i].key}-to-${this.stacks[i+1].key}`)
+                    //.selectAll(`.${this.stacks[i].key}-to-${this.stacks[i+1].key}`)
+                    .selectAll(".lgv-connection")
                     .data(this.stacks[i].connections)
-                    .enter()
-                    .append("path")
+                    .join(
+                        enter => enter.append("path"),
+                        update => update,
+                        exit => exit.remove()
+                    )
                     .attr("class", "lgv-connection")
                     .attr("data-path", d => [...new Set(this.connectionPaths.filter(x => x.includes(d.source) && x.includes(d.target)))])
                     .attr("data-source", d => d.source)
@@ -436,8 +465,11 @@ class StackedConnections {
                 select(domNode.nodes()[i])
                     .selectAll(".lgv-label")
                     .data(d.series)
-                    .enter()
-                    .append("g")
+                    .join(
+                        enter => enter.append("g"),
+                        update => update,
+                        exit => exit.remove()
+                    )
                     .attr("class", "lgv-label")
                     .attr("data-key", x => x.key)
                     .attr("transform", (x,j) => {
@@ -454,22 +486,37 @@ class StackedConnections {
                         let g = select(nodes2[j]);
 
                         // add background for when underlying layer makes text illegible
-                        g.append("rect")
+                        g.selectAll("rect")
+                            .data(d => [d])
+                            .join(
+                                enter => enter.append("rect"),
+                                update => update,
+                                exit => exit.remove()
+                            )
                             .attr("x", 0)
                             .attr("y", 0)
                             .attr("width", this.characterWidth(x.key, this.artboardUnit))
                             .attr("height", this.artboardUnit * 1.4);
 
                         // add text
-                        g.append("text")
+                        g.selectAll("text")
+                            .data(d => [d])
+                            .join(
+                                enter => enter.append("text"),
+                                update => update,
+                                exit => exit.remove()
+                            )
                             .attr("x", this.artboardUnit * 0.2)
                             .attr("y", this.artboardUnit)
                             .each((z, l, nodes3) => {
                                 select(nodes3[l])
                                     .selectAll("tspan")
                                     .data(this.includeValueInLabel ? [z.key, `${((z[0].data[z.key]/d.totalValues) * 100).toFixed(2)}%`] : [z.key])
-                                    .enter()
-                                    .append("tspan")
+                                    .join(
+                                        enter => enter.append("tspan"),
+                                        update => update,
+                                        exit => exit.remove()
+                                    )
                                     .attr("dx", (a, m) => m == 0 ? "" : `${m * 0.35}em`)
                                     .text(z => z);
                         });
@@ -486,11 +533,15 @@ class StackedConnections {
      */
     generateStackLabelGroups(domNode) {
         return domNode
-            .selectAll(".lgv-label")
+            .selectAll(".lgv-labels")
             .data(this.stacks ? this.stacks : [])
-            .enter()
-            .append("g")
-            .attr("class", d => `lgv-${d.key}-labels`);
+            .join(
+                enter => enter.append("g"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "lgv-labels");
+            //.attr("class", d => `lgv-${d.key}-labels`);
     }
 
     /**
@@ -502,9 +553,13 @@ class StackedConnections {
         return domNode
             .selectAll(".lgv-stack")
             .data(this.stacks ? this.stacks : [])
-            .enter()
-            .append("g")
-            .attr("class", d => `lgv-stack-${d.key}`);
+            .join(
+                enter => enter.append("g"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "lgv-stack");
+            //.attr("class", d => `lgv-stack-${d.key}`);
     }
 
     /**
@@ -556,17 +611,26 @@ class StackedConnections {
     }
 
     /**
-     * Render visualization.
-     * @param {node} domNode - HTML node
+     * Generate visualization.
      */
-    render(domNode) {
+    generateVisualization() {
+
+        // calculate series
+        this.configureData();
 
         // generate svg artboard
-        this.artboard = this.generateArtboard(domNode);
+        this.artboard = this.generateArtboard(this.container);
 
         // chart content group
         const artwork = this.artboard
-            .append("g")
+            .selectAll(".artwork")
+            .data(d => [d])
+            .join(
+                enter => enter.append("g"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "artwork")
             .attr("transform", d => `translate(0,${this.paddingAnnotations})`);
 
         // generate chart annotations
@@ -590,6 +654,38 @@ class StackedConnections {
 
         // generate labels
         this.generateStackLabels(this.stackLabelGroup);
+
+    }
+
+    /**
+     * Render visualization.
+     * @param {node} domNode - HTML node
+     */
+    render(domNode) {
+
+        // update self
+        this.container = select(domNode);
+
+        // generate visualization
+        this.generateVisualization();
+
+    }
+
+    /**
+     * Update visualization.
+     * @param {object} data - key/values where each key is a series label and corresponding value is an array of values
+     * @param {integer} height - height of artboard
+     * @param {integer} width - width of artboard
+     */
+    update(data, width, height) {
+
+        // update self
+        this.dataSource = data;
+        this.height = height;
+        this.width = width;
+
+        // generate visualization
+        this.generateVisualization();
 
     }
 
